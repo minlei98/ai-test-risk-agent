@@ -19,7 +19,13 @@ Distinguish:
 - test existence from meaningful coverage,
 - unit coverage from system coverage,
 - positive testing from negative testing,
-- static manifest validation from runtime validation.
+- static manifest validation from runtime validation,
+- Jira requirement analysis from repository traceability.
+
+For Jira input cards:
+- requirement analysis comes from the card text,
+- repository traceability comes from scanned repos,
+- do not collapse those into a single "repo has no tests" statement.
 
 Every recommendation must include:
 - risk,

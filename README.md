@@ -41,8 +41,11 @@ go build -o bin/test-risk-agent ./cmd/test-risk-agent
 
 ### Jira input test cases
 
-You can pass one or more Jira cards as input test cases. The agent maps each card
-to repository evidence and reports coverage gaps plus proposed executable tests.
+You can pass one or more Jira cards as input test cases. Jira analysis is
+separate from repository scanning:
+
+- **Requirement analysis** — what the Jira card says must be validated
+- **Repository traceability** — whether cloned repos contain tests that cover it
 
 Multiple cards are supported (comma-separated keys, config list, or fixture arrays).
 

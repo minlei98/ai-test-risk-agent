@@ -194,11 +194,28 @@ func compactEvidence(result *analyzer.Result) string {
 	}
 	if len(result.InputTestCases) > 0 {
 		b.WriteString("### Input test cases (Jira)\n")
+		b.WriteString("Analyze Jira cards separately from repository inventory. Use requirement analysis for what the card asks to validate, and repository traceability only for whether repos contain matching tests.\n")
 		for _, tc := range result.InputTestCases {
-			fmt.Fprintf(&b, "- %s (%s): coverage=%s score=%d evidence=%s\n",
-				tc.Key, tc.Summary, tc.CoverageStatus, tc.CoverageScore, tc.Evidence)
+			fmt.Fprintf(&b, "- %s (%s): requirement_coverage=%s score=%d\n",
+				tc.Key, tc.Summary, tc.CoverageStatus, tc.CoverageScore)
+			if tc.Description != "" {
+				fmt.Fprintf(&b, "  description: %s\n", tc.Description)
+			}
+			if tc.AcceptanceCriteria != "" {
+				fmt.Fprintf(&b, "  acceptance_criteria: %s\n", tc.AcceptanceCriteria)
+			}
+			if tc.RequirementAnalysis != "" {
+				fmt.Fprintf(&b, "  requirement_analysis: %s\n", tc.RequirementAnalysis)
+			}
+			if tc.RepoTraceability != "" {
+				fmt.Fprintf(&b, "  repo_traceability: %s\n", tc.RepoTraceability)
+			}
+			for _, item := range tc.RequirementItems {
+				fmt.Fprintf(&b, "  requirement: [%s] %s | repo_overlap=%s\n",
+					item.CoverageStatus, item.Text, item.RepoEvidence)
+			}
 			if len(tc.MissingScenarios) > 0 {
-				fmt.Fprintf(&b, "  missing: %s\n", strings.Join(tc.MissingScenarios, "; "))
+				fmt.Fprintf(&b, "  gaps: %s\n", strings.Join(tc.MissingScenarios, "; "))
 			}
 		}
 		b.WriteByte('\n')

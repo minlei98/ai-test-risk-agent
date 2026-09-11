@@ -288,7 +288,10 @@ func writeInputTestCases(b *strings.Builder, r *analyzer.Result) {
 		return
 	}
 	b.WriteString("## Input Test Cases (Jira)\n\n")
-	b.WriteString("| Jira | Parent | Summary | Coverage | Score | Status |\n")
+	b.WriteString("Jira cards are analyzed differently from repositories:\n\n")
+	b.WriteString("- **Requirement analysis** derives test scope from the Jira summary, description, and acceptance criteria.\n")
+	b.WriteString("- **Repository traceability** checks whether cloned repositories contain executable tests or implementation signals that satisfy that requirement.\n\n")
+	b.WriteString("| Jira | Parent | Summary | Requirement coverage | Score | Jira status |\n")
 	b.WriteString("|---|---|---|---|---:|---|\n")
 	for _, tc := range r.InputTestCases {
 		link := tc.Key
@@ -315,19 +318,40 @@ func writeInputTestCases(b *strings.Builder, r *analyzer.Result) {
 		if tc.IssueType != "" {
 			fmt.Fprintf(b, "- **Issue type:** %s\n", tc.IssueType)
 		}
-		fmt.Fprintf(b, "- **Coverage status:** %s (%d/100)\n", tc.CoverageStatus, tc.CoverageScore)
 		if tc.Priority != "" {
 			fmt.Fprintf(b, "- **Jira priority:** %s\n", tc.Priority)
+		}
+		fmt.Fprintf(b, "- **Requirement coverage:** %s (%d/100)\n", tc.CoverageStatus, tc.CoverageScore)
+
+		if tc.Description != "" {
+			fmt.Fprintf(b, "\n#### Requirement (from Jira)\n\n%s\n\n", tc.Description)
+		}
+		if tc.AcceptanceCriteria != "" {
+			fmt.Fprintf(b, "#### Acceptance criteria (from Jira)\n\n%s\n\n", tc.AcceptanceCriteria)
+		}
+		if tc.RequirementAnalysis != "" {
+			fmt.Fprintf(b, "#### Requirement analysis\n\n%s\n\n", tc.RequirementAnalysis)
+		}
+		if len(tc.RequirementItems) > 0 {
+			b.WriteString("#### Requirement statements\n\n")
+			b.WriteString("| Requirement | Coverage | Repository overlap |\n")
+			b.WriteString("|---|---|---|\n")
+			for _, item := range tc.RequirementItems {
+				fmt.Fprintf(b, "| %s | %s | %s |\n", item.Text, item.CoverageStatus, item.RepoEvidence)
+			}
+			b.WriteString("\n")
+		}
+		if tc.RepoTraceability != "" {
+			fmt.Fprintf(b, "#### Repository traceability\n\n%s\n\n", tc.RepoTraceability)
 		}
 		if len(tc.RelatedRepos) > 0 {
 			fmt.Fprintf(b, "- **Related repositories:** %s\n", strings.Join(tc.RelatedRepos, ", "))
 		}
-		fmt.Fprintf(b, "- **Evidence:** %s\n", tc.Evidence)
 		if len(tc.MatchedSignals) > 0 {
-			fmt.Fprintf(b, "- **Matched signals:** %s\n", strings.Join(tc.MatchedSignals, "; "))
+			fmt.Fprintf(b, "- **Matched repository test signals:** %s\n", strings.Join(tc.MatchedSignals, "; "))
 		}
 		if len(tc.MissingScenarios) > 0 {
-			b.WriteString("- **Missing scenarios:**\n")
+			b.WriteString("- **Gaps:**\n")
 			for _, gap := range tc.MissingScenarios {
 				fmt.Fprintf(b, "  - %s\n", gap)
 			}

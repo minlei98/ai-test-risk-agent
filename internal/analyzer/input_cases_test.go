@@ -23,6 +23,7 @@ func TestAnalyzeInputCasesDetectsGaps(t *testing.T) {
 		Key:     "OHSS-12345",
 		Summary: "Validate tenant RBAC isolation and negative security tests",
 		Description: "Acceptance Criteria:\n* tenant-a cannot access tenant-b secrets\n* denied responses are explicit",
+		AcceptanceCriteria: "tenant-a cannot access tenant-b secrets\n* denied responses are explicit",
 	}
 	out := AnalyzeInputCases([]jira.Issue{issue}, res)
 	if len(out) != 1 {
@@ -30,6 +31,15 @@ func TestAnalyzeInputCasesDetectsGaps(t *testing.T) {
 	}
 	if out[0].CoverageStatus == "COVERED" {
 		t.Fatalf("expected gap coverage, got %s", out[0].CoverageStatus)
+	}
+	if out[0].RequirementAnalysis == "" {
+		t.Fatal("expected requirement analysis")
+	}
+	if out[0].RepoTraceability == "" {
+		t.Fatal("expected repository traceability")
+	}
+	if len(out[0].RequirementItems) == 0 {
+		t.Fatal("expected requirement items from acceptance criteria")
 	}
 	if len(out[0].MissingScenarios) == 0 {
 		t.Fatal("expected missing scenarios")
