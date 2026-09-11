@@ -1,0 +1,78 @@
+project:
+  name: argya-gitops
+  description: "Cross-repository test risk analysis for Argya and Hyperfleet GitOps"
+
+repositories:
+  - name: argya
+    url: https://github.com/openshift-online/argya
+    branch: main
+    role: application
+  - name: hp-gitops-manifests
+    url: https://github.com/openshift-online/hp-gitops-manifests
+    branch: main
+    role: gitops-manifests
+  - name: hp-gitops-tenants
+    url: https://github.com/openshift-online/hp-gitops-tenants
+    branch: main
+    role: gitops-tenants
+
+analysis:
+  max_file_bytes: 1048576
+  max_files: 20000
+  ignore:
+    - .git
+    - vendor
+    - node_modules
+    - dist
+    - build
+    - .cache
+  test_extensions:
+    - _test.go
+    - _test.py
+    - .spec.ts
+    - .test.ts
+    - .spec.js
+    - .test.js
+    - .feature
+  critical_terms:
+    - iam
+    - sts
+    - oidc
+    - rbac
+    - secret
+    - certificate
+    - tenant
+    - namespace
+    - networkpolicy
+    - ingress
+    - loadbalancer
+    - storage
+    - pvc
+    - webhook
+    - controller
+    - reconciler
+    - argocd
+    - application
+    - applicationset
+    - sync
+    - rollout
+    - upgrade
+    - delete
+    - cleanup
+    - finalizer
+
+risk:
+  weights:
+    customer_impact: 0.25
+    security: 0.20
+    complexity: 0.15
+    test_gap: 0.25
+    change_surface: 0.15
+  high_threshold: 70
+  medium_threshold: 40
+
+llm:
+  enabled: true
+  base_url: https://generativelanguage.googleapis.com/v1beta
+  model: gemini-3.1-pro-preview
+  timeout_seconds: 120

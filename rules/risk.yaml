@@ -1,0 +1,36 @@
+risk_categories:
+  security:
+    terms: [iam, sts, oidc, rbac, secret, credential, token, certificate, networkpolicy]
+    base: 30
+  gitops:
+    terms: [argocd, application, applicationset, sync, kustomize, helm, gitops]
+    base: 25
+  reliability:
+    terms: [retry, timeout, reconcile, controller, webhook, health, readiness, cleanup]
+    base: 25
+  multi_tenancy:
+    terms: [tenant, namespace, project, isolation]
+    base: 30
+  data:
+    terms: [database, postgres, pvc, storage, backup, restore]
+    base: 25
+  networking:
+    terms: [service, ingress, route, loadbalancer, networkpolicy, dns]
+    base: 20
+
+test_types:
+  unit: [_test.go, unit, unittest]
+  component: [component, controller_test]
+  integration: [integration, envtest, integration_test]
+  api_contract: [contract, api_test, openapi]
+  functional: [functional, e2e]
+  e2e: [e2e, end-to-end]
+  system: [system]
+  regression: [regression]
+  smoke: [smoke]
+  sanity: [sanity]
+  negative: [negative, invalid, forbidden, denied, failure, error]
+  security: [security, rbac, authorization, unauthorized, privilege]
+  resilience: [chaos, fault, recovery, restart, failover, disruption]
+  performance: [benchmark, load, stress, performance, latency]
+  upgrade: [upgrade, migration, rollback, compatibility]
