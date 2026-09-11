@@ -192,6 +192,17 @@ func compactEvidence(result *analyzer.Result) string {
 		}
 		b.WriteByte('\n')
 	}
+	if len(result.InputTestCases) > 0 {
+		b.WriteString("### Input test cases (Jira)\n")
+		for _, tc := range result.InputTestCases {
+			fmt.Fprintf(&b, "- %s (%s): coverage=%s score=%d evidence=%s\n",
+				tc.Key, tc.Summary, tc.CoverageStatus, tc.CoverageScore, tc.Evidence)
+			if len(tc.MissingScenarios) > 0 {
+				fmt.Fprintf(&b, "  missing: %s\n", strings.Join(tc.MissingScenarios, "; "))
+			}
+		}
+		b.WriteByte('\n')
+	}
 
 	return b.String()
 }

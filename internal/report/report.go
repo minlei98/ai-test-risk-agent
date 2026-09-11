@@ -33,6 +33,7 @@ func Markdown(cfg *config.Config, r *analyzer.Result, llmReport string) string {
 	writeSecurityAnalysis(&b, r)
 	writeResilienceAnalysis(&b, r)
 	writeUncoveredRisks(&b, r)
+	writeInputTestCases(&b, r)
 	writeRiskAreas(&b, r)
 	writeCrossRepoGaps(&b, r)
 	writeRecommendations(&b, r)
@@ -280,6 +281,74 @@ func writeUncoveredRisks(b *strings.Builder, r *analyzer.Result) {
 		fmt.Fprintf(b, "- %s\n", risk)
 	}
 	b.WriteString("\n")
+}
+
+func writeInputTestCases(b *strings.Builder, r *analyzer.Result) {
+	if len(r.InputTestCases) == 0 {
+		return
+	}
+	b.WriteString("## Input Test Cases (Jira)\n\n")
+	b.WriteString("| Jira | Parent | Summary | Coverage | Score | Status |\n")
+	b.WriteString("|---|---|---|---|---:|---|\n")
+	for _, tc := range r.InputTestCases {
+		link := tc.Key
+		if tc.URL != "" {
+			link = fmt.Sprintf("[%s](%s)", tc.Key, tc.URL)
+		}
+		parent := tc.ParentKey
+		if parent == "" {
+			parent = "—"
+		}
+		fmt.Fprintf(b, "| %s | %s | %s | %s | %d/100 | %s |\n",
+			link, parent, tc.Summary, tc.CoverageStatus, tc.CoverageScore, tc.Status)
+	}
+	b.WriteString("\n")
+
+	for i, tc := range r.InputTestCases {
+		fmt.Fprintf(b, "### Input Test Case %d: %s — %s\n\n", i+1, tc.Key, tc.Summary)
+		if tc.URL != "" {
+			fmt.Fprintf(b, "- **Jira:** [%s](%s)\n", tc.Key, tc.URL)
+		}
+		if tc.ParentKey != "" {
+			fmt.Fprintf(b, "- **Parent:** %s\n", tc.ParentKey)
+		}
+		if tc.IssueType != "" {
+			fmt.Fprintf(b, "- **Issue type:** %s\n", tc.IssueType)
+		}
+		fmt.Fprintf(b, "- **Coverage status:** %s (%d/100)\n", tc.CoverageStatus, tc.CoverageScore)
+		if tc.Priority != "" {
+			fmt.Fprintf(b, "- **Jira priority:** %s\n", tc.Priority)
+		}
+		if len(tc.RelatedRepos) > 0 {
+			fmt.Fprintf(b, "- **Related repositories:** %s\n", strings.Join(tc.RelatedRepos, ", "))
+		}
+		fmt.Fprintf(b, "- **Evidence:** %s\n", tc.Evidence)
+		if len(tc.MatchedSignals) > 0 {
+			fmt.Fprintf(b, "- **Matched signals:** %s\n", strings.Join(tc.MatchedSignals, "; "))
+		}
+		if len(tc.MissingScenarios) > 0 {
+			b.WriteString("- **Missing scenarios:**\n")
+			for _, gap := range tc.MissingScenarios {
+				fmt.Fprintf(b, "  - %s\n", gap)
+			}
+		}
+		if tc.ProposedTestLevel != "" {
+			fmt.Fprintf(b, "- **Proposed test level:** %s\n", tc.ProposedTestLevel)
+		}
+		if tc.ProposedTestSteps != "" {
+			b.WriteString("- **Concrete test steps:**\n")
+			for _, step := range strings.Split(tc.ProposedTestSteps, "\n") {
+				step = strings.TrimSpace(step)
+				if step != "" {
+					fmt.Fprintf(b, "  %s\n", step)
+				}
+			}
+		}
+		if tc.Recommendation != "" {
+			fmt.Fprintf(b, "- **Recommendation:** %s\n", tc.Recommendation)
+		}
+		b.WriteString("\n")
+	}
 }
 
 func writeRiskAreas(b *strings.Builder, r *analyzer.Result) {

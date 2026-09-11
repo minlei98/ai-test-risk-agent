@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/minlei98/ai-test-risk-agent/internal/analyzer"
 	"github.com/minlei98/ai-test-risk-agent/internal/config"
+	"github.com/minlei98/ai-test-risk-agent/internal/jira"
 	"github.com/minlei98/ai-test-risk-agent/internal/llm"
 	"github.com/minlei98/ai-test-risk-agent/internal/paths"
 	"github.com/minlei98/ai-test-risk-agent/internal/report"
@@ -16,7 +18,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 || os.Args[1] != "analyze" {
-		fmt.Println("usage: test-risk-agent analyze --config CONFIG --output report.md [--json-output report.json]")
+		fmt.Println("usage: test-risk-agent analyze --config CONFIG --output report.md [--jira KEY] [--jira-file FILE] [--json-output report.json]")
 		os.Exit(2)
 	}
 
@@ -24,6 +26,9 @@ func main() {
 	cfgPath := fs.String("config", "configs/argya-gitops.yaml", "configuration file")
 	output := fs.String("output", "report.md", "markdown report")
 	jsonOutput := fs.String("json-output", "", "optional JSON report")
+	jiraKeys := fs.String("jira", "", "comma-separated Jira issue keys or browse URLs")
+	jiraFile := fs.String("jira-file", "", "comma-separated JSON files with Jira issue fixtures")
+	jiraNoChildren := fs.Bool("jira-no-children", false, "do not fetch child/subtask issues for parent cards")
 	keep := fs.Bool("keep-workdir", false, "keep cloned repositories")
 	noClone := fs.Bool("no-clone", false, "use repository paths as local paths when url is a local directory")
 	_ = keep
@@ -39,6 +44,22 @@ func main() {
 
 	result, err := analyzer.Analyze(cfg, roots)
 	if err != nil { fail(err) }
+
+	jiraKeysList := mergeCSV(*jiraKeys, cfg.Jira.Keys)
+	jiraFilesList := mergeCSV(*jiraFile, cfg.Jira.Files)
+	if len(jiraKeysList) > 0 || len(jiraFilesList) > 0 {
+		creds, err := jira.LoadCredentials()
+		if err != nil { fail(err) }
+		opts := jira.DefaultResolveOptions()
+		opts.MaxIssues = cfg.Jira.MaxIssues
+		opts.IncludeChildren = !*jiraNoChildren
+		if cfg.Jira.IncludeChildren != nil {
+			opts.IncludeChildren = *cfg.Jira.IncludeChildren
+		}
+		issues, err := jira.ResolveIssues(opts, cfg.Jira.BaseURL, creds, jiraKeysList, jiraFilesList)
+		if err != nil { fail(err) }
+		result.InputTestCases = analyzer.AnalyzeInputCases(issues, result)
+	}
 
 	var llmReport string
 	if cfg.LLM.Enabled {
@@ -66,4 +87,16 @@ func main() {
 func fail(err error) {
 	fmt.Fprintln(os.Stderr, "error:", err)
 	os.Exit(1)
+}
+
+func mergeCSV(flagValue string, configValues []string) []string {
+	var out []string
+	for _, part := range strings.Split(flagValue, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	out = append(out, configValues...)
+	return out
 }

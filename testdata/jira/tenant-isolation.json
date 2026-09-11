@@ -1,0 +1,11 @@
+{
+  "key": "OHSS-12345",
+  "summary": "Validate tenant RBAC and network isolation for GitOps tenants",
+  "description": "Ensure tenant-a cannot access tenant-b secrets or services.\n\nAcceptance Criteria:\n* Provision tenant-a and tenant-b via GitOps manifests\n* Attempt cross-namespace secret access from tenant-a\n* Attempt network access to tenant-b private service\n* Both attempts must be denied",
+  "issue_type": "Story",
+  "priority": "Critical",
+  "status": "To Do",
+  "labels": ["security", "multi-tenancy", "e2e"],
+  "components": ["hp-gitops-tenants"],
+  "url": "https://issues.redhat.com/browse/OHSS-12345"
+}

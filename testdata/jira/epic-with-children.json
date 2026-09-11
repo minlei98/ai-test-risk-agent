@@ -1,0 +1,26 @@
+{
+  "key": "OHSS-1000",
+  "summary": "Epic: Tenant isolation hardening",
+  "description": "Improve multi-tenant isolation across GitOps tenants.",
+  "issue_type": "Epic",
+  "children": [
+    {
+      "key": "OHSS-1001",
+      "summary": "Validate RBAC isolation between tenants",
+      "description": "Acceptance Criteria:\n* tenant-a cannot read tenant-b secrets",
+      "issue_type": "Story",
+      "children": [
+        {
+          "key": "OHSS-1002",
+          "summary": "Automate negative RBAC test in CI",
+          "issue_type": "Sub-task"
+        }
+      ]
+    },
+    {
+      "key": "OHSS-1003",
+      "summary": "Validate network policy isolation",
+      "issue_type": "Story"
+    }
+  ]
+}

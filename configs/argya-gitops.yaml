@@ -76,3 +76,14 @@ llm:
   base_url: https://generativelanguage.googleapis.com/v1beta
   model: gemini-3.1-pro-preview
   timeout_seconds: 120
+
+# Optional Jira input test cases (also overridable via --jira / --jira-file)
+jira:
+  base_url: https://redhat.atlassian.net
+  include_children: true
+  max_issues: 50
+  # keys:
+  #   - OHSS-1000
+  #   - OHSS-2000
+  # files:
+  #   - testdata/jira/epic-with-children.json

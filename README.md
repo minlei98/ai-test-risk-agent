@@ -39,6 +39,82 @@ go build -o bin/test-risk-agent ./cmd/test-risk-agent
   --output report.md
 ```
 
+### Jira input test cases
+
+You can pass one or more Jira cards as input test cases. The agent maps each card
+to repository evidence and reports coverage gaps plus proposed executable tests.
+
+Multiple cards are supported (comma-separated keys, config list, or fixture arrays).
+
+When a parent card is included, child issues are fetched automatically by default:
+subtasks, `parent = KEY` children, and Epic-linked stories (`"Epic Link" = KEY`).
+
+Remote fetch (requires Jira API token):
+
+```bash
+export JIRA_TOKEN=...
+./bin/test-risk-agent analyze \
+  --config configs/argya-gitops.yaml \
+  --jira OHSS-1000,OHSS-2000 \
+  --output report.md
+```
+
+Offline fixture (no Jira API needed):
+
+```bash
+./bin/test-risk-agent analyze \
+  --config configs/argya-gitops.yaml \
+  --jira-file testdata/jira/tenant-isolation.json \
+  --output report.md
+```
+
+Jira settings can also live in config:
+
+```yaml
+jira:
+  base_url: https://issues.redhat.com
+  include_children: true   # default when omitted
+  max_issues: 50
+  keys:
+    - OHSS-1000
+  files:
+    - testdata/jira/epic-with-children.json
+```
+
+`--jira` accepts issue keys or browse URLs. Use `--jira-no-children` to analyze
+only the cards you explicitly pass.
+
+SDCICD tickets live on [redhat.atlassian.net](https://redhat.atlassian.net). Set
+`jira.base_url` accordingly, or pass a full browse URL:
+
+```bash
+./bin/test-risk-agent analyze \
+  --jira https://redhat.atlassian.net/browse/SDCICD-1915 \
+  --output report.md
+```
+
+Authentication for Atlassian Cloud:
+
+```bash
+export JIRA_USER=you@redhat.com   # or JIRA_EMAIL
+export JIRA_TOKEN=...             # API token from id.atlassian.com
+```
+
+The client tries Basic auth (`JIRA_USER` + token) first, then Bearer. Force a
+mode with `JIRA_AUTH=basic` or `JIRA_AUTH=bearer` if needed.
+
+Fixture files can nest children:
+
+```json
+{
+  "key": "OHSS-1000",
+  "summary": "Epic parent",
+  "children": [
+    { "key": "OHSS-1001", "summary": "Child story" }
+  ]
+}
+```
+
 The analyzer works without an LLM. It performs deterministic repository scanning
 and scoring. If `llm.enabled` is true, it sends the collected evidence to the
 Google Gemini API for synthesis (same stack as argya/featurecheck).
@@ -75,6 +151,9 @@ Useful options:
 ```text
 --keep-workdir       Keep cloned repositories
 --no-clone           Analyze existing local paths from config
+--jira KEY           Comma-separated Jira keys or browse URLs
+--jira-file FILE     Comma-separated JSON Jira issue fixtures
+--jira-no-children   Skip fetching subtasks/child issues for parent cards
 --output report.md
 --json-output report.json
 ```

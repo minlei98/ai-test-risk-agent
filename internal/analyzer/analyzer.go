@@ -68,7 +68,8 @@ type Result struct {
 	SecurityChecks   []SecurityCheck  `json:"security_checks"`
 	ResilienceChecks []ResilienceCheck `json:"resilience_checks"`
 	CILayers         []CILayer        `json:"ci_layers"`
-	UncoveredRisks   []string         `json:"uncovered_risks"`
+	UncoveredRisks   []string              `json:"uncovered_risks"`
+	InputTestCases   []InputTestCaseResult `json:"input_test_cases,omitempty"`
 }
 
 func PrepareRepositories(cfg *config.Config) (map[string]string, func(), error) {

@@ -36,6 +36,13 @@ type Config struct {
 		Model string `yaml:"model"`
 		TimeoutSeconds int `yaml:"timeout_seconds"`
 	} `yaml:"llm"`
+	Jira struct {
+		BaseURL         string   `yaml:"base_url"`
+		Keys            []string `yaml:"keys"`
+		Files           []string `yaml:"files"`
+		IncludeChildren *bool    `yaml:"include_children"`
+		MaxIssues       int      `yaml:"max_issues"`
+	} `yaml:"jira"`
 	SourcePath string `yaml:"-"`
 }
 
@@ -79,6 +86,9 @@ func applyDefaults(c *Config) {
 	}
 	if c.Risk.MediumThreshold == 0 {
 		c.Risk.MediumThreshold = 40
+	}
+	if c.Jira.MaxIssues == 0 {
+		c.Jira.MaxIssues = 50
 	}
 	for i := range c.Repositories {
 		if c.Repositories[i].Branch == "" {
