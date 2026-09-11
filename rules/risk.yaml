@@ -22,6 +22,7 @@ test_types:
   unit: [_test.go, unit, unittest]
   component: [component, controller_test]
   integration: [integration, envtest, integration_test]
+  api: [api_test, api, contract, openapi]
   api_contract: [contract, api_test, openapi]
   functional: [functional, e2e]
   e2e: [e2e, end-to-end]

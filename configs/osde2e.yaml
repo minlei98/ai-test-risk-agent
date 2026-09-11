@@ -1,0 +1,38 @@
+project:
+  name: osde2e
+  type: managed-openshift
+  description: "E2E test framework evaluation for managed OpenShift — focuses on integration/E2E effectiveness, CI execution, and production confidence."
+
+repositories:
+  - name: osde2e
+    url: https://github.com/openshift/osde2e
+    branch: main
+  - name: osde2e-common
+    url: https://github.com/openshift/osde2e-common
+    branch: main
+
+analysis:
+  test_levels:
+    - unit
+    - component
+    - integration
+    - api
+    - functional
+    - e2e
+    - system
+  cross_cutting:
+    - negative
+    - security
+    - resilience
+    - performance
+    - upgrade
+    - regression
+
+risk:
+  prioritize:
+    - customer_impact
+    - security
+    - data_loss
+    - infrastructure_failure
+    - cloud_cost
+    - recovery

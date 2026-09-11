@@ -136,14 +136,24 @@ func SynthesizeReport(cfg *config.Config, result *analyzer.Result, systemPrompt,
 
 func compactEvidence(result *analyzer.Result) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Overall risk: %d/100 (%s)\n\n", result.OverallRisk, result.RiskLevel)
+	fmt.Fprintf(&b, "Overall risk: %d/100 (%s)\n", result.OverallRisk, result.RiskLevel)
+	fmt.Fprintf(&b, "Quality: %.1f/10 | Release readiness: %s\n\n",
+		result.Scorecard.OverallQuality, result.Scorecard.ReleaseReadiness)
 
 	for _, repo := range result.Repos {
 		fmt.Fprintf(&b, "### Repository: %s (%s)\n", repo.Name, repo.Role)
-		fmt.Fprintf(&b, "- Files: %d, Lines: %d, Test files: %d\n", repo.Files, repo.Lines, repo.TestFiles)
-		if len(repo.TestTypes) > 0 {
-			b.WriteString("- Test type signals: ")
-			for k, v := range repo.TestTypes {
+		fmt.Fprintf(&b, "- Files: %d, Lines: %d, Test files: %d, Spec files: %d, Skips: %d\n",
+			repo.Files, repo.Lines, repo.TestFiles, repo.SpecFiles, repo.SkipCount)
+		if len(repo.TestLevels) > 0 {
+			b.WriteString("- Test level signals: ")
+			for k, v := range repo.TestLevels {
+				fmt.Fprintf(&b, "%s=%d ", k, v)
+			}
+			b.WriteByte('\n')
+		}
+		if len(repo.CrossCutting) > 0 {
+			b.WriteString("- Cross-cutting signals: ")
+			for k, v := range repo.CrossCutting {
 				fmt.Fprintf(&b, "%s=%d ", k, v)
 			}
 			b.WriteByte('\n')
@@ -161,10 +171,24 @@ func compactEvidence(result *analyzer.Result) string {
 		b.WriteByte('\n')
 	}
 
+	if len(result.TopRisks) > 0 {
+		b.WriteString("### Top risks\n")
+		for _, g := range result.TopRisks {
+			fmt.Fprintf(&b, "- %s\n", g)
+		}
+		b.WriteByte('\n')
+	}
 	if len(result.CrossRepoGaps) > 0 {
 		b.WriteString("### Cross-repository gaps\n")
 		for _, g := range result.CrossRepoGaps {
 			fmt.Fprintf(&b, "- %s\n", g)
+		}
+		b.WriteByte('\n')
+	}
+	if len(result.KeyIssues) > 0 {
+		b.WriteString("### Key issues\n")
+		for _, issue := range result.KeyIssues {
+			fmt.Fprintf(&b, "- %s: %s\n", issue.Issue, issue.Impact)
 		}
 		b.WriteByte('\n')
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/minlei98/ai-test-risk-agent/internal/analyzer"
 	"github.com/minlei98/ai-test-risk-agent/internal/config"
 	"github.com/minlei98/ai-test-risk-agent/internal/llm"
+	"github.com/minlei98/ai-test-risk-agent/internal/paths"
 	"github.com/minlei98/ai-test-risk-agent/internal/report"
 )
 
@@ -41,7 +42,9 @@ func main() {
 
 	var llmReport string
 	if cfg.LLM.Enabled {
-		systemPrompt, userPrompt, err := llm.LoadPrompts("prompts")
+		promptsDir, err := paths.ResolveDir(cfg.SourcePath, "prompts")
+		if err != nil { fail(err) }
+		systemPrompt, userPrompt, err := llm.LoadPrompts(promptsDir)
 		if err != nil { fail(err) }
 		llmReport, err = llm.SynthesizeReport(cfg, result, systemPrompt, userPrompt)
 		if err != nil { fail(err) }
