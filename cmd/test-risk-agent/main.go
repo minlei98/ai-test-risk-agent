@@ -58,7 +58,7 @@ func main() {
 		}
 		issues, err := jira.ResolveIssues(opts, cfg.Jira.BaseURL, creds, jiraKeysList, jiraFilesList)
 		if err != nil { fail(err) }
-		result.InputTestCases = analyzer.AnalyzeInputCases(issues, result)
+		result.InputTestCases = analyzer.AnalyzeInputCases(issues, result, cfg)
 	}
 
 	var llmReport string

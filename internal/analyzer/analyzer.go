@@ -69,7 +69,9 @@ type Result struct {
 	ResilienceChecks []ResilienceCheck `json:"resilience_checks"`
 	CILayers         []CILayer        `json:"ci_layers"`
 	UncoveredRisks   []string              `json:"uncovered_risks"`
-	InputTestCases   []InputTestCaseResult `json:"input_test_cases,omitempty"`
+	AnalysisMode            string                `json:"analysis_mode"`
+	DeprioritizedCategories []string              `json:"deprioritized_categories,omitempty"`
+	InputTestCases          []InputTestCaseResult `json:"input_test_cases,omitempty"`
 }
 
 func PrepareRepositories(cfg *config.Config) (map[string]string, func(), error) {
@@ -108,7 +110,9 @@ func Analyze(cfg *config.Config, roots map[string]string) (*Result, error) {
 		return nil, fmt.Errorf("load rules %s: %w", rulesPath, err)
 	}
 
-	res := &Result{}
+	res := &Result{
+		DeprioritizedCategories: cfg.Risk.Deprioritize,
+	}
 	for _, r := range cfg.Repositories {
 		rr, err := analyzeRepo(cfg, ruleSet, r, roots[r.Name])
 		if err != nil {
@@ -129,6 +133,9 @@ func Analyze(cfg *config.Config, roots map[string]string) (*Result, error) {
 		return res.Recommendations[i].Score > res.Recommendations[j].Score
 	})
 	buildAssessment(cfg, res)
+	if res.AnalysisMode == "" {
+		res.AnalysisMode = AnalysisModeRepository
+	}
 
 	return res, nil
 }

@@ -45,6 +45,14 @@ func Markdown(cfg *config.Config, r *analyzer.Result, llmReport string) string {
 
 func writeExecutiveSummary(b *strings.Builder, cfg *config.Config, r *analyzer.Result) {
 	b.WriteString("## 1. Executive Summary\n\n")
+	if r.AnalysisMode == analyzer.AnalysisModeHybrid {
+		b.WriteString("**Analysis mode:** hybrid — Jira cards define test requirements and repositories provide supporting evidence when matching tests exist.\n\n")
+	} else {
+		b.WriteString("**Analysis mode:** repository — risk analysis is driven by scanned repository evidence.\n\n")
+	}
+	if len(r.DeprioritizedCategories) > 0 {
+		fmt.Fprintf(b, "**Deprioritized test categories:** %s\n\n", strings.Join(r.DeprioritizedCategories, ", "))
+	}
 	b.WriteString("| Metric | Assessment |\n|---|---|\n")
 	fmt.Fprintf(b, "| Overall quality score | %.1f / 10 |\n", r.Scorecard.OverallQuality)
 	fmt.Fprintf(b, "| Overall risk level | %s |\n", r.RiskLevel)
@@ -288,10 +296,10 @@ func writeInputTestCases(b *strings.Builder, r *analyzer.Result) {
 		return
 	}
 	b.WriteString("## Input Test Cases (Jira)\n\n")
-	b.WriteString("Jira cards are analyzed differently from repositories:\n\n")
-	b.WriteString("- **Requirement analysis** derives test scope from the Jira summary, description, and acceptance criteria.\n")
-	b.WriteString("- **Repository traceability** checks whether cloned repositories contain executable tests or implementation signals that satisfy that requirement.\n\n")
-	b.WriteString("| Jira | Parent | Summary | Requirement coverage | Score | Jira status |\n")
+	b.WriteString("When Jira cards are provided, each card is classified into test categories and evaluated using **both** sources:\n\n")
+	b.WriteString("- **Jira evidence** — summary, description, and acceptance criteria\n")
+	b.WriteString("- **Repository evidence** — matching tests in scanned repos, when they exist\n\n")
+	b.WriteString("| Jira | Parent | Category | Summary | Coverage | Score | Jira status |\n")
 	b.WriteString("|---|---|---|---|---:|---|\n")
 	for _, tc := range r.InputTestCases {
 		link := tc.Key
@@ -302,8 +310,12 @@ func writeInputTestCases(b *strings.Builder, r *analyzer.Result) {
 		if parent == "" {
 			parent = "—"
 		}
-		fmt.Fprintf(b, "| %s | %s | %s | %s | %d/100 | %s |\n",
-			link, parent, tc.Summary, tc.CoverageStatus, tc.CoverageScore, tc.Status)
+		category := tc.PrimaryTestCategory
+		if category == "" {
+			category = "—"
+		}
+		fmt.Fprintf(b, "| %s | %s | %s | %s | %s | %d/100 | %s |\n",
+			link, parent, category, tc.Summary, tc.CoverageStatus, tc.CoverageScore, tc.Status)
 	}
 	b.WriteString("\n")
 
@@ -321,7 +333,15 @@ func writeInputTestCases(b *strings.Builder, r *analyzer.Result) {
 		if tc.Priority != "" {
 			fmt.Fprintf(b, "- **Jira priority:** %s\n", tc.Priority)
 		}
-		fmt.Fprintf(b, "- **Requirement coverage:** %s (%d/100)\n", tc.CoverageStatus, tc.CoverageScore)
+		fmt.Fprintf(b, "- **Primary test category:** %s\n", tc.PrimaryTestCategory)
+		if len(tc.TestCategories) > 0 {
+			fmt.Fprintf(b, "- **Test categories:** %s\n", strings.Join(tc.TestCategories, ", "))
+		}
+		if len(tc.RiskDomains) > 0 {
+			fmt.Fprintf(b, "- **Risk domains:** %s\n", strings.Join(tc.RiskDomains, ", "))
+		}
+		fmt.Fprintf(b, "- **Test level:** %s\n", tc.TestLevel)
+		fmt.Fprintf(b, "- **Coverage:** %s (%d/100)\n", tc.CoverageStatus, tc.CoverageScore)
 
 		if tc.Description != "" {
 			fmt.Fprintf(b, "\n#### Requirement (from Jira)\n\n%s\n\n", tc.Description)
@@ -332,12 +352,25 @@ func writeInputTestCases(b *strings.Builder, r *analyzer.Result) {
 		if tc.RequirementAnalysis != "" {
 			fmt.Fprintf(b, "#### Requirement analysis\n\n%s\n\n", tc.RequirementAnalysis)
 		}
+		if tc.JiraEvidence != "" {
+			fmt.Fprintf(b, "#### Jira evidence\n\n%s\n\n", tc.JiraEvidence)
+		}
+		if tc.RepoTestEvidence != "" {
+			fmt.Fprintf(b, "#### Repository test evidence\n\n%s\n\n", tc.RepoTestEvidence)
+		}
 		if len(tc.RequirementItems) > 0 {
 			b.WriteString("#### Requirement statements\n\n")
-			b.WriteString("| Requirement | Coverage | Repository overlap |\n")
-			b.WriteString("|---|---|---|\n")
+			b.WriteString("| Requirement | Status | Jira evidence | Repository evidence |\n")
+			b.WriteString("|---|---|---|---|\n")
 			for _, item := range tc.RequirementItems {
-				fmt.Fprintf(b, "| %s | %s | %s |\n", item.Text, item.CoverageStatus, item.RepoEvidence)
+				fmt.Fprintf(b, "| %s | %s | %s | %s |\n", item.Text, item.Status, item.JiraEvidence, item.RepoEvidence)
+			}
+			b.WriteString("\n")
+		}
+		if len(tc.E2EScenarios) > 0 {
+			b.WriteString("#### Proposed E2E scenarios\n\n")
+			for _, scenario := range tc.E2EScenarios {
+				fmt.Fprintf(b, "- %s\n", scenario)
 			}
 			b.WriteString("\n")
 		}
@@ -350,12 +383,6 @@ func writeInputTestCases(b *strings.Builder, r *analyzer.Result) {
 		if len(tc.MatchedSignals) > 0 {
 			fmt.Fprintf(b, "- **Matched repository test signals:** %s\n", strings.Join(tc.MatchedSignals, "; "))
 		}
-		if len(tc.MissingScenarios) > 0 {
-			b.WriteString("- **Gaps:**\n")
-			for _, gap := range tc.MissingScenarios {
-				fmt.Fprintf(b, "  - %s\n", gap)
-			}
-		}
 		if tc.ProposedTestLevel != "" {
 			fmt.Fprintf(b, "- **Proposed test level:** %s\n", tc.ProposedTestLevel)
 		}
@@ -367,6 +394,9 @@ func writeInputTestCases(b *strings.Builder, r *analyzer.Result) {
 					fmt.Fprintf(b, "  %s\n", step)
 				}
 			}
+		}
+		if tc.PriorityNote != "" {
+			fmt.Fprintf(b, "- **Priority note:** %s\n", tc.PriorityNote)
 		}
 		if tc.Recommendation != "" {
 			fmt.Fprintf(b, "- **Recommendation:** %s\n", tc.Recommendation)

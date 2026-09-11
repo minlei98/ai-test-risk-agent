@@ -68,6 +68,14 @@ risk:
     complexity: 0.15
     test_gap: 0.25
     change_surface: 0.15
+  prioritize:
+    - security
+    - gitops
+    - multi_tenancy
+    - customer_impact
+    - resilience
+  deprioritize:
+    - performance
   high_threshold: 70
   medium_threshold: 40
 

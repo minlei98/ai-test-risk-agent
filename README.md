@@ -41,11 +41,13 @@ go build -o bin/test-risk-agent ./cmd/test-risk-agent
 
 ### Jira input test cases
 
-You can pass one or more Jira cards as input test cases. Jira analysis is
-separate from repository scanning:
+Analysis works in two modes:
 
-- **Requirement analysis** — what the Jira card says must be validated
-- **Repository traceability** — whether cloned repos contain tests that cover it
+- **No Jira cards** — repository scanning drives risk analysis
+- **With Jira cards** — hybrid mode:
+  - classify each card into test categories (e2e, security, integration, etc.)
+  - use **Jira evidence** from the card text
+  - use **repository test evidence** when matching tests exist in scanned repos
 
 Multiple cards are supported (comma-separated keys, config list, or fixture arrays).
 

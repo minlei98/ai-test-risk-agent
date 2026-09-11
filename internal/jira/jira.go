@@ -195,7 +195,7 @@ func fetchIssueTree(opts ResolveOptions, baseURL string, creds Credentials, key,
 		return nil
 	}
 
-	childKeys, err := discoverChildKeys(baseURL, creds, parentKey, issue)
+	childKeys, err := discoverChildKeys(baseURL, creds, key, issue)
 	if err != nil {
 		return err
 	}
@@ -207,9 +207,9 @@ func fetchIssueTree(opts ResolveOptions, baseURL string, creds Credentials, key,
 	return nil
 }
 
-func discoverChildKeys(baseURL string, creds Credentials, parentKey string, issue Issue) ([]string, error) {
+func discoverChildKeys(baseURL string, creds Credentials, issueKey string, issue Issue) ([]string, error) {
 	keys := childKeysFromIssue(issue)
-	for _, jql := range childSearchJQL(baseURL, parentKey) {
+	for _, jql := range childSearchJQL(baseURL, issueKey) {
 		found, err := searchIssueKeys(baseURL, creds, jql)
 		if err != nil {
 			continue

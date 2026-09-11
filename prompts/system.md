@@ -22,10 +22,14 @@ Distinguish:
 - static manifest validation from runtime validation,
 - Jira requirement analysis from repository traceability.
 
-For Jira input cards:
-- requirement analysis comes from the card text,
-- repository traceability comes from scanned repos,
-- do not collapse those into a single "repo has no tests" statement.
+When no Jira cards are provided, use repository evidence for risk analysis.
+When Jira cards are provided:
+- classify each card into test categories,
+- use Jira text as requirement evidence,
+- use repository tests as supporting evidence when they exist,
+- combine both sources instead of relying on repos alone.
+
+Respect project deprioritized categories from evidence (for example, performance may be intentionally lower priority).
 
 Every recommendation must include:
 - risk,

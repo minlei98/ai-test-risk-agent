@@ -3,10 +3,18 @@ package analyzer
 import (
 	"testing"
 
+	"github.com/minlei98/ai-test-risk-agent/internal/config"
 	"github.com/minlei98/ai-test-risk-agent/internal/jira"
 )
 
-func TestAnalyzeInputCasesDetectsGaps(t *testing.T) {
+func argyaConfig() *config.Config {
+	cfg := &config.Config{}
+	cfg.Risk.Prioritize = []string{"security", "gitops", "multi_tenancy", "customer_impact", "resilience"}
+	cfg.Risk.Deprioritize = []string{"performance"}
+	return cfg
+}
+
+func TestAnalyzeInputCasesWithoutRepoTestsUsesJiraEvidence(t *testing.T) {
 	res := &Result{
 		Repos: []RepoResult{
 			{
@@ -20,28 +28,74 @@ func TestAnalyzeInputCasesDetectsGaps(t *testing.T) {
 		},
 	}
 	issue := jira.Issue{
-		Key:     "OHSS-12345",
-		Summary: "Validate tenant RBAC isolation and negative security tests",
-		Description: "Acceptance Criteria:\n* tenant-a cannot access tenant-b secrets\n* denied responses are explicit",
-		AcceptanceCriteria: "tenant-a cannot access tenant-b secrets\n* denied responses are explicit",
+		Key:                "SDCICD-1911",
+		Summary:            "Argo Progressive delivery pipeline feature testing",
+		Description:        "Validate progressive delivery on live ArgoCD hub",
+		AcceptanceCriteria: "Rollout pauses on failure\nRollback restores previous version",
 	}
-	out := AnalyzeInputCases([]jira.Issue{issue}, res)
+	out := AnalyzeInputCases([]jira.Issue{issue}, res, argyaConfig())
 	if len(out) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(out))
 	}
-	if out[0].CoverageStatus == "COVERED" {
-		t.Fatalf("expected gap coverage, got %s", out[0].CoverageStatus)
+	tc := out[0]
+	if res.AnalysisMode != AnalysisModeHybrid {
+		t.Fatalf("expected hybrid mode, got %s", res.AnalysisMode)
 	}
-	if out[0].RequirementAnalysis == "" {
-		t.Fatal("expected requirement analysis")
+	if tc.PrimaryTestCategory == "performance" {
+		t.Fatal("performance should not be primary for progressive delivery card")
 	}
-	if out[0].RepoTraceability == "" {
-		t.Fatal("expected repository traceability")
+	if tc.CoverageStatus == "NOT COVERED" {
+		t.Fatalf("Jira-only evidence should not be NOT COVERED, got %s", tc.CoverageStatus)
 	}
-	if len(out[0].RequirementItems) == 0 {
-		t.Fatal("expected requirement items from acceptance criteria")
+}
+
+func TestAnalyzeInputCasesUsesRepoEvidenceWhenPresent(t *testing.T) {
+	res := &Result{
+		Repos: []RepoResult{
+			{
+				Name:         "argya",
+				Role:         "application",
+				Files:        100,
+				TestFiles:    5,
+				CrossCutting: map[string]int{"security": 3},
+				TestLevels:   map[string]int{"e2e": 4, "integration": 2},
+			},
+		},
 	}
-	if len(out[0].MissingScenarios) == 0 {
-		t.Fatal("expected missing scenarios")
+	issue := jira.Issue{
+		Key:                "SDCICD-2000",
+		Summary:            "Security E2E validation for tenant isolation",
+		AcceptanceCriteria: "Cross-tenant access must be denied",
+	}
+	out := AnalyzeInputCases([]jira.Issue{issue}, res, argyaConfig())
+	tc := out[0]
+	if len(tc.MatchedSignals) == 0 {
+		t.Fatal("expected matched repository signals")
+	}
+	if tc.CoverageStatus != "COVERED" && tc.CoverageStatus != "PARTIAL" {
+		t.Fatalf("expected covered/partial when repo tests exist, got %s", tc.CoverageStatus)
+	}
+}
+
+func TestPerformanceCardIsDeprioritizedForArgya(t *testing.T) {
+	res := &Result{Repos: []RepoResult{{Name: "argya", Files: 10}}}
+	issue := jira.Issue{
+		Key:                "SDCICD-3000",
+		Summary:            "Load test progressive delivery throughput",
+		Description:        "Measure performance and latency during rollout",
+		AcceptanceCriteria: "Latency remains under threshold during load test",
+	}
+	out := AnalyzeInputCases([]jira.Issue{issue}, res, argyaConfig())
+	tc := out[0]
+	if tc.PriorityNote == "" {
+		t.Fatal("expected priority note for deprioritized performance card")
+	}
+}
+
+func TestRepositoryModeWhenNoJira(t *testing.T) {
+	res := &Result{Repos: []RepoResult{{Name: "argya", Files: 10}}}
+	out := AnalyzeInputCases(nil, res, argyaConfig())
+	if out != nil {
+		t.Fatal("expected nil input cases without jira")
 	}
 }

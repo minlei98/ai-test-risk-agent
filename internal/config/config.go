@@ -27,6 +27,7 @@ type Config struct {
 	Risk struct {
 		Weights         map[string]float64 `yaml:"weights"`
 		Prioritize      []string           `yaml:"prioritize"`
+		Deprioritize    []string           `yaml:"deprioritize"`
 		HighThreshold   float64            `yaml:"high_threshold"`
 		MediumThreshold float64            `yaml:"medium_threshold"`
 	} `yaml:"risk"`
