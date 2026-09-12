@@ -32,10 +32,14 @@ type Config struct {
 		MediumThreshold float64            `yaml:"medium_threshold"`
 	} `yaml:"risk"`
 	LLM struct {
-		Enabled bool `yaml:"enabled"`
-		BaseURL string `yaml:"base_url"`
-		Model string `yaml:"model"`
-		TimeoutSeconds int `yaml:"timeout_seconds"`
+		Enabled            bool   `yaml:"enabled"`
+		Mode               string `yaml:"mode"` // off, executive, full
+		BaseURL            string `yaml:"base_url"`
+		Model              string `yaml:"model"`
+		TimeoutSeconds     int    `yaml:"timeout_seconds"`
+		MaxOutputTokens    int    `yaml:"max_output_tokens"`
+		MaxFindingsPerRepo int    `yaml:"max_findings_per_repo"`
+		MaxEvidenceChars   int    `yaml:"max_evidence_chars"`
 	} `yaml:"llm"`
 	Jira struct {
 		BaseURL         string   `yaml:"base_url"`
@@ -90,6 +94,15 @@ func applyDefaults(c *Config) {
 	}
 	if c.Jira.MaxIssues == 0 {
 		c.Jira.MaxIssues = 50
+	}
+	if c.LLM.Enabled && c.LLM.Mode == "" {
+		c.LLM.Mode = "executive"
+	}
+	if c.LLM.MaxFindingsPerRepo == 0 {
+		c.LLM.MaxFindingsPerRepo = 8
+	}
+	if c.LLM.MaxEvidenceChars == 0 {
+		c.LLM.MaxEvidenceChars = 24000
 	}
 	for i := range c.Repositories {
 		if c.Repositories[i].Branch == "" {

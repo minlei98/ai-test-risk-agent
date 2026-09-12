@@ -3,7 +3,8 @@ package config
 import "strings"
 
 var defaultCategoryPriority = []string{
-	"security", "resilience", "upgrade", "negative", "integration", "e2e", "performance",
+	"security", "gitops", "multi_tenancy", "customer_impact", "resilience",
+	"upgrade", "negative", "functionality", "integration", "e2e", "performance",
 }
 
 // CategoryPriority returns test-category precedence for Jira classification.

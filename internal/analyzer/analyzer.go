@@ -71,6 +71,7 @@ type Result struct {
 	UncoveredRisks   []string              `json:"uncovered_risks"`
 	AnalysisMode            string                `json:"analysis_mode"`
 	DeprioritizedCategories []string              `json:"deprioritized_categories,omitempty"`
+	JiraSummary             JiraSummary           `json:"jira_summary,omitempty"`
 	InputTestCases          []InputTestCaseResult `json:"input_test_cases,omitempty"`
 }
 
@@ -285,18 +286,29 @@ func repoFindings(cfg *config.Config, rr RepoResult) []Finding {
 }
 
 func gitOpsFindings(rr RepoResult, totalTests int, add func(string, int, string, string, string, string, string, string)) {
+	switch rr.Role {
+	case "gitops-manifests":
+		gitOpsManifestFindings(rr, totalTests, add)
+	case "gitops-tenants":
+		gitOpsTenantFindings(rr, totalTests, add)
+	default:
+		gitOpsApplicationFindings(rr, totalTests, add)
+	}
+}
+
+func gitOpsApplicationFindings(rr RepoResult, totalTests int, add func(string, int, string, string, string, string, string, string)) {
 	if rr.CriticalHits["iam"]+rr.CriticalHits["sts"]+rr.CriticalHits["oidc"] > 0 &&
 		rr.CrossCutting["security"] == 0 && rr.CrossCutting["negative"] == 0 {
 		add("Security / IAM", 90, "P0",
-			"IAM/STS/OIDC-related implementation evidence exists but no explicit security/negative test evidence was detected in test files.",
+			"IAM/STS/OIDC-related implementation evidence exists in application code but no explicit security/negative test evidence was detected.",
 			"Denied-permission, expired credential, and authorization boundary scenarios are not evidenced in tests.",
-			"Add denied-permission, expired/invalid credential, and authorization boundary tests at integration/E2E level.",
+			"Add denied-permission, expired/invalid credential, and authorization boundary tests at integration/E2E level in this application repository or its linked E2E harness.",
 			"Integration / E2E",
-			"1. Provision identities with least privilege.\n2. Attempt forbidden API calls.\n3. Assert explicit 403/denied responses.")
+			"1. Provision identities with least privilege.\n2. Attempt forbidden API calls against the application.\n3. Assert explicit 403/denied responses.")
 	}
 	if rr.CriticalHits["tenant"]+rr.CriticalHits["namespace"] > 0 && rr.CrossCutting["negative"] == 0 {
 		add("Multi-tenancy", 85, "P0",
-			"Tenant/namespace concepts are present without detected negative isolation tests.",
+			"Tenant/namespace concepts are present in application code without detected negative isolation tests.",
 			"Cross-tenant access attempts are not evidenced in test files.",
 			"Add cross-tenant access-denied tests, namespace isolation tests, and credential/RBAC boundary tests.",
 			"E2E / System",
@@ -304,7 +316,7 @@ func gitOpsFindings(rr RepoResult, totalTests int, add func(string, int, string,
 	}
 	if rr.CriticalHits["argocd"]+rr.CriticalHits["application"]+rr.CriticalHits["applicationset"] > 0 && rr.CrossCutting["negative"] == 0 {
 		add("GitOps failure handling", 80, "P1",
-			"Argo CD/Application evidence exists but no explicit negative test evidence was detected.",
+			"Argo CD/Application integration exists in application code but no explicit negative test evidence was detected.",
 			"Invalid manifests, failed sync, and rollback scenarios are not evidenced.",
 			"Test invalid manifests, failed sync, missing dependencies, drift, rollback, and recovery from partial sync.",
 			"Integration / E2E",
@@ -312,7 +324,7 @@ func gitOpsFindings(rr RepoResult, totalTests int, add func(string, int, string,
 	}
 	if rr.CriticalHits["cleanup"]+rr.CriticalHits["finalizer"] > 0 && rr.CrossCutting["resilience"] == 0 {
 		add("Cleanup / recovery", 78, "P1",
-			"Cleanup/finalizer behavior is present without detected recovery testing.",
+			"Cleanup/finalizer behavior is present in application code without detected recovery testing.",
 			"Partial-failure cleanup and stuck-finalizer scenarios are not evidenced.",
 			"Add partial-failure cleanup, deletion timeout, stuck-finalizer, retry, and idempotent reconciliation tests.",
 			"Integration / E2E",
@@ -326,7 +338,90 @@ func gitOpsFindings(rr RepoResult, totalTests int, add func(string, int, string,
 			"E2E / System",
 			"1. Deploy full stack.\n2. Exercise primary workflow.\n3. Inject failure and verify recovery.")
 	}
-	if totalTests == 0 && rr.Files > 20 {
+	gitOpsTestExistenceFinding(rr, totalTests, add)
+}
+
+func gitOpsManifestFindings(rr RepoResult, totalTests int, add func(string, int, string, string, string, string, string, string)) {
+	if rr.CriticalHits["secret"]+rr.CriticalHits["rbac"]+rr.CriticalHits["oidc"]+rr.CriticalHits["sts"] > 0 &&
+		totalTests == 0 {
+		add("Manifest security policy", 82, "P0",
+			"Security-sensitive manifest references (secrets, RBAC, OIDC/STS) exist but no manifest validation tests were detected.",
+			"RBAC scope, secret references, and auth configuration are not validated automatically in CI.",
+			"Add manifest policy checks in CI (kubeconform, conftest/OPA, RBAC and NetworkPolicy review). Runtime IAM/E2E tests belong in the application or external harness, not this manifests repo.",
+			"CI / Policy",
+			"1. Run kustomize build on every overlay.\n2. Validate rendered manifests with kubeconform.\n3. Assert RBAC/NetworkPolicy rules with conftest or policy tests.")
+	}
+	if rr.CriticalHits["tenant"]+rr.CriticalHits["namespace"] > 0 && totalTests == 0 {
+		add("Tenant manifest isolation", 78, "P1",
+			"Tenant/namespace resources are declared in manifests without automated isolation checks.",
+			"Cross-tenant namespace boundaries in YAML are not validated in CI.",
+			"Add policy tests that verify namespace labels, NetworkPolicy defaults, and RoleBinding scope per tenant overlay.",
+			"CI / Policy",
+			"1. Render tenant overlays.\n2. Assert namespace and NetworkPolicy boundaries in policy tests.\n3. Block merges that widen cross-tenant access.")
+	}
+	if rr.CriticalHits["argocd"]+rr.CriticalHits["application"]+rr.CriticalHits["applicationset"] > 0 && totalTests == 0 {
+		add("GitOps manifest validation", 75, "P1",
+			"Argo CD Application/Rollout manifests exist without detected render or schema validation.",
+			"Broken overlays, invalid sync policies, or promotion hooks may reach clusters unchecked.",
+			"Add kustomize build, helm template (if used), and kubeconform gates in CI. Live sync failure tests belong in a deployed environment, not this repo.",
+			"CI / Schema",
+			"1. Build each overlay in CI.\n2. Validate rendered YAML against cluster schemas.\n3. Fail PRs on invalid Application or Rollout definitions.")
+	}
+	if rr.CriticalHits["cleanup"]+rr.CriticalHits["finalizer"] > 0 && totalTests == 0 {
+		add("Finalizer manifest review", 70, "P2",
+			"Finalizer/cleanup resources are declared in manifests without automated checks.",
+			"Deletion and finalizer behavior is not validated before promotion.",
+			"Add manifest review or policy tests for finalizer presence and deletion safety; runtime recovery tests belong in E2E against a live cluster.",
+			"CI / Policy",
+			"1. Identify resources with finalizers in rendered manifests.\n2. Add policy rules for required cleanup hooks.\n3. Document expected deletion order per overlay.")
+	}
+	gitOpsTestExistenceFinding(rr, totalTests, add)
+}
+
+func gitOpsTenantFindings(rr RepoResult, totalTests int, add func(string, int, string, string, string, string, string, string)) {
+	if rr.CriticalHits["secret"]+rr.CriticalHits["tenant"]+rr.CriticalHits["namespace"] > 0 && totalTests == 0 {
+		add("Tenant boundary configuration", 85, "P0",
+			"Tenant AppProject/Application definitions reference secrets or namespaces without automated validation.",
+			"Cross-tenant destination or namespace allowlist mistakes are not caught in CI.",
+			"Add YAML schema and policy validation for AppProject cluster/namespace allowlists and Application destinations. Runtime tenant isolation tests belong in E2E against deployed clusters.",
+			"CI / Policy",
+			"1. Parse AppProject and Application YAML in CI.\n2. Assert each tenant can only target allowed clusters/namespaces.\n3. Block merges that broaden destination rules.")
+	}
+	if rr.CriticalHits["argocd"]+rr.CriticalHits["application"]+rr.CriticalHits["applicationset"] > 0 && totalTests == 0 {
+		add("Application wiring validation", 78, "P1",
+			"Argo CD Application/ApplicationSet tenant wiring exists without detected validation tests.",
+			"Broken generator templates or invalid source paths may reach the hub unchecked.",
+			"Add CI validation for ApplicationSet templates and Application source/destination fields.",
+			"CI / Schema",
+			"1. Validate ApplicationSet generators render expected Applications.\n2. Check source repo paths and revision fields.\n3. Fail PRs on invalid tenant application definitions.")
+	}
+	if rr.CriticalHits["iam"]+rr.CriticalHits["sts"]+rr.CriticalHits["oidc"] > 0 && totalTests == 0 {
+		add("Tenant auth configuration review", 72, "P2",
+			"OIDC/STS references appear in tenant configuration but are not validated automatically.",
+			"Misconfigured auth paths or secret references may not be caught before sync.",
+			"Review ExternalSecret and auth-related fields in tenant YAML; add schema/policy checks. Runtime credential and API denial tests belong in the application E2E harness.",
+			"CI / Policy",
+			"1. List auth-related secret references per tenant.\n2. Validate required keys and paths with policy tests.\n3. Document which runtime auth scenarios are covered externally.")
+	}
+	gitOpsTestExistenceFinding(rr, totalTests, add)
+}
+
+func gitOpsTestExistenceFinding(rr RepoResult, totalTests int, add func(string, int, string, string, string, string, string, string)) {
+	if totalTests > 0 {
+		return
+	}
+	if rr.Files <= 20 {
+		return
+	}
+	switch rr.Role {
+	case "gitops-manifests", "gitops-tenants":
+		add("Manifest CI validation", 88, "P0",
+			fmt.Sprintf("%s contains %d YAML/manifest files but no detected validation tests.", rr.Name, rr.Files),
+			"No automated manifest validation is evidenced in this repository.",
+			"Add CI gates for kustomize build, schema validation (kubeconform), and linting before merges.",
+			"CI / Policy",
+			"1. Add kustomize build --load-restrictor for each overlay.\n2. Run kubeconform or kubeval on rendered output.\n3. Gate PR merges on validation success.")
+	default:
 		add("Test existence", 88, "P0",
 			fmt.Sprintf("%s contains %d files but no detected test or spec files.", rr.Name, rr.Files),
 			"No automated validation is evidenced in this repository.",

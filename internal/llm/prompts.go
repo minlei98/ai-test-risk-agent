@@ -4,11 +4,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-func LoadPrompts(dir string) (string, string, error) {
+func LoadPrompts(dir string, mode string) (string, string, error) {
 	systemPath := filepath.Join(dir, "system.md")
-	reportPath := filepath.Join(dir, "report.md")
+	reportName := "report.md"
+	if strings.EqualFold(mode, "executive") {
+		reportName = "report-executive.md"
+	}
+	reportPath := filepath.Join(dir, reportName)
 
 	systemBytes, err := os.ReadFile(systemPath)
 	if err != nil {

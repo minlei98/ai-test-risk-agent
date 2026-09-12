@@ -55,13 +55,17 @@ type InputTestCaseResult struct {
 }
 
 var testCategoryTerms = map[string][]string{
-	"e2e":         {"e2e", "end-to-end", "workflow", "system", "feature", "testing", "parity", "live", "hub", "saas", "rollout", "progressive", "delivery"},
-	"integration": {"integration", "sync", "deploy", "provision", "tenant", "argocd", "application", "applicationset"},
-	"security":    {"security", "auth", "authorization", "rbac", "permission", "denied", "forbidden", "oidc", "iam", "sts", "credential", "secret"},
-	"negative":    {"negative", "invalid", "failure", "error", "denied", "timeout", "reject", "malformed", "unauthorized"},
-	"resilience":  {"resilience", "recovery", "retry", "failover", "outage", "deletion", "cleanup", "finalizer", "rollback"},
-	"performance": {"performance", "latency", "throughput", "load", "scale", "benchmark", "stress"},
-	"upgrade":     {"upgrade", "migration", "version", "compatibility"},
+	"security":        {"security", "auth", "authorization", "rbac", "permission", "denied", "forbidden", "oidc", "iam", "sts", "credential", "secret"},
+	"gitops":          {"gitops", "argocd", "application", "applicationset", "sync", "kustomize", "helm", "rollout", "progressive", "delivery", "drift"},
+	"multi_tenancy":   {"multi-tenant", "multitenant", "tenant", "namespace", "project", "isolation", "cross-tenant"},
+	"customer_impact": {"customer", "production", "outage", "sla", "downtime", "critical path", "user-facing", "customer-facing"},
+	"resilience":      {"resilience", "recovery", "retry", "failover", "outage", "deletion", "cleanup", "finalizer", "rollback"},
+	"upgrade":         {"upgrade", "migration", "version", "compatibility"},
+	"negative":        {"negative", "invalid", "failure", "error", "denied", "timeout", "reject", "malformed", "unauthorized"},
+	"functionality":   {"functional", "functionality", "feature", "behavior", "capability", "regression", "parity"},
+	"integration":     {"integration", "deploy", "provision", "envtest", "contract"},
+	"e2e":             {"e2e", "end-to-end", "workflow", "system", "live", "hub", "saas", "smoke", "sanity"},
+	"performance":     {"performance", "latency", "throughput", "load", "scale", "benchmark", "stress"},
 }
 
 var riskDomainTerms = map[string][]string{
@@ -87,6 +91,7 @@ func AnalyzeInputCases(issues []jira.Issue, res *Result, cfg *config.Config) []I
 	for _, issue := range issues {
 		out = append(out, analyzeInputCase(issue, res, cfg))
 	}
+	res.JiraSummary = BuildJiraSummary(out, cfg)
 	return out
 }
 
@@ -189,7 +194,7 @@ func defaultCategoryOrder(cfg *config.Config) []string {
 	if cfg != nil {
 		return cfg.CategoryPriority()
 	}
-	return []string{"security", "resilience", "upgrade", "negative", "integration", "e2e", "performance"}
+	return []string{"security", "gitops", "multi_tenancy", "customer_impact", "resilience", "upgrade", "negative", "functionality", "integration", "e2e", "performance"}
 }
 
 func priorityNote(primary string, categories []string, cfg *config.Config) string {
@@ -452,8 +457,14 @@ func categorySignalTotal(category string, repos []RepoResult) int {
 	total := 0
 	for _, repo := range repos {
 		switch category {
-		case "e2e", "integration":
+		case "e2e", "integration", "functionality", "customer_impact":
 			total += repo.TestLevels["e2e"] + repo.TestLevels["system"] + repo.TestLevels["integration"] + repo.TestLevels["functional"]
+		case "gitops":
+			total += repo.TestLevels["integration"] + repo.TestLevels["e2e"]
+			total += repo.CriticalHits["argocd"] + repo.CriticalHits["application"] + repo.CriticalHits["applicationset"] + repo.CriticalHits["sync"]
+		case "multi_tenancy":
+			total += repo.CriticalHits["tenant"] + repo.CriticalHits["namespace"]
+			total += repo.CrossCutting["negative"]
 		default:
 			total += repo.CrossCutting[category]
 			total += repo.TestLevels[category]
@@ -473,8 +484,12 @@ func proposeTestLevel(categories []string, cfg *config.Config) string {
 		return "E2E / Performance"
 	case "security", "negative":
 		return "Security / E2E"
-	case "integration":
+	case "gitops", "integration":
 		return "Integration / E2E"
+	case "multi_tenancy", "customer_impact":
+		return "E2E / System"
+	case "functionality":
+		return "Functional / E2E"
 	case "upgrade":
 		return "E2E / System"
 	default:

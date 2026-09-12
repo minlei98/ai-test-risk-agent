@@ -81,9 +81,13 @@ risk:
 
 llm:
   enabled: true
+  mode: executive          # executive (default) | full | off
   base_url: https://generativelanguage.googleapis.com/v1beta
   model: gemini-3.1-pro-preview
   timeout_seconds: 120
+  max_output_tokens: 2048  # use 8192 for mode: full
+  max_findings_per_repo: 8
+  max_evidence_chars: 24000
 
 # Optional Jira input test cases (also overridable via --jira / --jira-file)
 jira:

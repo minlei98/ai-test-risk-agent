@@ -29,6 +29,7 @@ func main() {
 	jiraKeys := fs.String("jira", "", "comma-separated Jira issue keys or browse URLs")
 	jiraFile := fs.String("jira-file", "", "comma-separated JSON files with Jira issue fixtures")
 	jiraNoChildren := fs.Bool("jira-no-children", false, "do not fetch child/subtask issues for parent cards")
+	noLLM := fs.Bool("no-llm", false, "skip LLM synthesis; deterministic report only")
 	keep := fs.Bool("keep-workdir", false, "keep cloned repositories")
 	noClone := fs.Bool("no-clone", false, "use repository paths as local paths when url is a local directory")
 	_ = keep
@@ -61,11 +62,15 @@ func main() {
 		result.InputTestCases = analyzer.AnalyzeInputCases(issues, result, cfg)
 	}
 
+	if *noLLM {
+		cfg.LLM.Enabled = false
+	}
+
 	var llmReport string
-	if cfg.LLM.Enabled {
+	if llm.LLMEnabled(cfg) {
 		promptsDir, err := paths.ResolveDir(cfg.SourcePath, "prompts")
 		if err != nil { fail(err) }
-		systemPrompt, userPrompt, err := llm.LoadPrompts(promptsDir)
+		systemPrompt, userPrompt, err := llm.LoadPrompts(promptsDir, cfg.LLM.Mode)
 		if err != nil { fail(err) }
 		llmReport, err = llm.SynthesizeReport(cfg, result, systemPrompt, userPrompt)
 		if err != nil { fail(err) }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,8 +17,8 @@ import (
 )
 
 type generateContentRequest struct {
-	SystemInstruction *contentBlock   `json:"systemInstruction,omitempty"`
-	Contents          []contentBlock  `json:"contents"`
+	SystemInstruction *contentBlock    `json:"systemInstruction,omitempty"`
+	Contents          []contentBlock   `json:"contents"`
 	GenerationConfig  generationConfig `json:"generationConfig"`
 }
 
@@ -26,8 +27,8 @@ type generationConfig struct {
 }
 
 type contentBlock struct {
-	Role  string       `json:"role,omitempty"`
-	Parts []textPart   `json:"parts"`
+	Role  string     `json:"role,omitempty"`
+	Parts []textPart `json:"parts"`
 }
 
 type textPart struct {
@@ -45,8 +46,19 @@ type generateContentResponse struct {
 	} `json:"error"`
 }
 
+func LLMEnabled(cfg *config.Config) bool {
+	if cfg == nil {
+		return false
+	}
+	mode := strings.ToLower(strings.TrimSpace(cfg.LLM.Mode))
+	if mode == "off" {
+		return false
+	}
+	return cfg.LLM.Enabled
+}
+
 func SynthesizeReport(cfg *config.Config, result *analyzer.Result, systemPrompt, userPrompt string) (string, error) {
-	if !cfg.LLM.Enabled {
+	if !LLMEnabled(cfg) {
 		return "", nil
 	}
 	apiKey := os.Getenv("GEMINI_API_KEY")
@@ -60,12 +72,21 @@ func SynthesizeReport(cfg *config.Config, result *analyzer.Result, systemPrompt,
 		return "", fmt.Errorf("llm.model is required when llm.enabled is true")
 	}
 
-	evidence := compactEvidence(result)
+	evidence := compactEvidence(cfg, result)
 	user := strings.TrimSpace(userPrompt) + "\n\n## Evidence\n\n" + evidence
 
 	timeout := time.Duration(cfg.LLM.TimeoutSeconds) * time.Second
 	if timeout <= 0 {
 		timeout = 120 * time.Second
+	}
+
+	maxOut := cfg.LLM.MaxOutputTokens
+	if maxOut <= 0 {
+		if strings.EqualFold(cfg.LLM.Mode, "full") {
+			maxOut = 8192
+		} else {
+			maxOut = 2048
+		}
 	}
 
 	body, err := json.Marshal(generateContentRequest{
@@ -78,7 +99,7 @@ func SynthesizeReport(cfg *config.Config, result *analyzer.Result, systemPrompt,
 				Parts: []textPart{{Text: user}},
 			},
 		},
-		GenerationConfig: generationConfig{MaxOutputTokens: 8192},
+		GenerationConfig: generationConfig{MaxOutputTokens: maxOut},
 	})
 	if err != nil {
 		return "", err
@@ -134,7 +155,20 @@ func SynthesizeReport(cfg *config.Config, result *analyzer.Result, systemPrompt,
 	return strings.TrimSpace(text.String()), nil
 }
 
-func compactEvidence(result *analyzer.Result) string {
+func compactEvidence(cfg *config.Config, result *analyzer.Result) string {
+	maxFindings := 8
+	maxChars := 24000
+	executive := true
+	if cfg != nil {
+		if cfg.LLM.MaxFindingsPerRepo > 0 {
+			maxFindings = cfg.LLM.MaxFindingsPerRepo
+		}
+		if cfg.LLM.MaxEvidenceChars > 0 {
+			maxChars = cfg.LLM.MaxEvidenceChars
+		}
+		executive = !strings.EqualFold(cfg.LLM.Mode, "full")
+	}
+
 	var b strings.Builder
 	fmt.Fprintf(&b, "Overall risk: %d/100 (%s)\n", result.OverallRisk, result.RiskLevel)
 	if result.AnalysisMode != "" {
@@ -150,48 +184,21 @@ func compactEvidence(result *analyzer.Result) string {
 		fmt.Fprintf(&b, "### Repository: %s (%s)\n", repo.Name, repo.Role)
 		fmt.Fprintf(&b, "- Files: %d, Lines: %d, Test files: %d, Spec files: %d, Skips: %d\n",
 			repo.Files, repo.Lines, repo.TestFiles, repo.SpecFiles, repo.SkipCount)
-		if len(repo.TestLevels) > 0 {
-			b.WriteString("- Test level signals: ")
-			for k, v := range repo.TestLevels {
-				fmt.Fprintf(&b, "%s=%d ", k, v)
-			}
-			b.WriteByte('\n')
-		}
-		if len(repo.CrossCutting) > 0 {
-			b.WriteString("- Cross-cutting signals: ")
-			for k, v := range repo.CrossCutting {
-				fmt.Fprintf(&b, "%s=%d ", k, v)
-			}
-			b.WriteByte('\n')
-		}
-		if len(repo.CriticalHits) > 0 {
-			b.WriteString("- Critical term hits: ")
-			for k, v := range repo.CriticalHits {
-				fmt.Fprintf(&b, "%s=%d ", k, v)
-			}
-			b.WriteByte('\n')
-		}
-		for _, f := range repo.Findings {
+		writeNonZeroMap(&b, "Test level signals", repo.TestLevels)
+		writeNonZeroMap(&b, "Cross-cutting signals", repo.CrossCutting)
+		writeTopMapEntries(&b, "Critical term hits", repo.CriticalHits, 8)
+		for _, f := range topFindings(repo.Findings, maxFindings) {
 			fmt.Fprintf(&b, "- [%s %s %d] %s | %s\n", f.Severity, f.Category, f.Score, f.Evidence, f.Recommendation)
+		}
+		if len(repo.Findings) > maxFindings {
+			fmt.Fprintf(&b, "- ... %d more findings omitted\n", len(repo.Findings)-maxFindings)
 		}
 		b.WriteByte('\n')
 	}
 
-	if len(result.TopRisks) > 0 {
-		b.WriteString("### Top risks\n")
-		for _, g := range result.TopRisks {
-			fmt.Fprintf(&b, "- %s\n", g)
-		}
-		b.WriteByte('\n')
-	}
-	if len(result.CrossRepoGaps) > 0 {
-		b.WriteString("### Cross-repository gaps\n")
-		for _, g := range result.CrossRepoGaps {
-			fmt.Fprintf(&b, "- %s\n", g)
-		}
-		b.WriteByte('\n')
-	}
-	if len(result.KeyIssues) > 0 {
+	writeBulletSection(&b, "### Top risks", result.TopRisks, 10)
+	writeBulletSection(&b, "### Cross-repository gaps", result.CrossRepoGaps, 10)
+	if !executive && len(result.KeyIssues) > 0 {
 		b.WriteString("### Key issues\n")
 		for _, issue := range result.KeyIssues {
 			fmt.Fprintf(&b, "- %s: %s\n", issue.Issue, issue.Impact)
@@ -199,39 +206,136 @@ func compactEvidence(result *analyzer.Result) string {
 		b.WriteByte('\n')
 	}
 	if len(result.InputTestCases) > 0 {
-		b.WriteString("### Input test cases (Jira)\n")
-		b.WriteString("Analysis mode is hybrid. Classify each Jira card into test categories and use both Jira text and repository test evidence when available.\n")
+		b.WriteString("### Jira test scope (category-level)\n")
+		if result.JiraSummary.OverallAnalysis != "" {
+			fmt.Fprintf(&b, "%s\n", result.JiraSummary.OverallAnalysis)
+		}
+		for _, cat := range result.JiraSummary.Categories {
+			fmt.Fprintf(&b, "- category=%s cards=%d risk=%s repo_support=%s keys=%s analysis=%s\n",
+				cat.Category, cat.CardCount, cat.RiskLevel, cat.RepoSupport, strings.Join(cat.Keys, ","), cat.RiskAnalysis)
+		}
+		for _, risk := range result.JiraSummary.TopRisks {
+			fmt.Fprintf(&b, "- category_risk: %s\n", risk)
+		}
 		for _, tc := range result.InputTestCases {
-			fmt.Fprintf(&b, "- %s (%s): category=%s categories=%s coverage=%s score=%d test_level=%s\n",
-				tc.Key, tc.Summary, tc.PrimaryTestCategory, strings.Join(tc.TestCategories, ","), tc.CoverageStatus, tc.CoverageScore, tc.TestLevel)
-			if tc.Description != "" {
-				fmt.Fprintf(&b, "  description: %s\n", tc.Description)
+			if !analyzer.CardNeedsAttention(tc) {
+				continue
 			}
-			if tc.AcceptanceCriteria != "" {
-				fmt.Fprintf(&b, "  acceptance_criteria: %s\n", tc.AcceptanceCriteria)
-			}
-			if len(tc.RiskDomains) > 0 {
-				fmt.Fprintf(&b, "  risk_domains: %s\n", strings.Join(tc.RiskDomains, ", "))
-			}
-			if tc.JiraEvidence != "" {
-				fmt.Fprintf(&b, "  jira_evidence: %s\n", tc.JiraEvidence)
-			}
-			if tc.RepoTestEvidence != "" {
-				fmt.Fprintf(&b, "  repo_test_evidence: %s\n", tc.RepoTestEvidence)
-			}
-			if tc.RequirementAnalysis != "" {
-				fmt.Fprintf(&b, "  requirement_analysis: %s\n", tc.RequirementAnalysis)
-			}
-			for _, item := range tc.RequirementItems {
-				fmt.Fprintf(&b, "  requirement: [%s] %s | jira=%s | repo=%s\n",
-					item.Status, item.Text, item.JiraEvidence, item.RepoEvidence)
-			}
-			if len(tc.E2EScenarios) > 0 {
-				fmt.Fprintf(&b, "  e2e_scenarios: %s\n", strings.Join(tc.E2EScenarios, "; "))
-			}
+			fmt.Fprintf(&b, "- flagged %s (%s): category=%s coverage=%s score=%d recommendation=%s\n",
+				tc.Key, tc.Summary, tc.PrimaryTestCategory, tc.CoverageStatus, tc.CoverageScore, tc.Recommendation)
 		}
 		b.WriteByte('\n')
 	}
 
-	return b.String()
+	out := b.String()
+	if maxChars > 0 && len(out) > maxChars {
+		out = out[:maxChars] + "\n\n[evidence truncated for token budget]\n"
+	}
+	return out
+}
+
+func writeBulletSection(b *strings.Builder, title string, items []string, limit int) {
+	if len(items) == 0 {
+		return
+	}
+	b.WriteString(title)
+	b.WriteByte('\n')
+	for i, item := range items {
+		if limit > 0 && i >= limit {
+			fmt.Fprintf(b, "- ... %d more omitted\n", len(items)-limit)
+			break
+		}
+		fmt.Fprintf(b, "- %s\n", item)
+	}
+	b.WriteByte('\n')
+}
+
+func writeNonZeroMap(b *strings.Builder, label string, m map[string]int) {
+	if len(m) == 0 {
+		return
+	}
+	var parts []string
+	for k, v := range m {
+		if v > 0 {
+			parts = append(parts, fmt.Sprintf("%s=%d", k, v))
+		}
+	}
+	if len(parts) == 0 {
+		return
+	}
+	sort.Strings(parts)
+	b.WriteString("- ")
+	b.WriteString(label)
+	b.WriteString(": ")
+	b.WriteString(strings.Join(parts, " "))
+	b.WriteByte('\n')
+}
+
+func writeTopMapEntries(b *strings.Builder, label string, m map[string]int, limit int) {
+	if len(m) == 0 {
+		return
+	}
+	type kv struct {
+		key string
+		val int
+	}
+	var entries []kv
+	for k, v := range m {
+		if v > 0 {
+			entries = append(entries, kv{k, v})
+		}
+	}
+	if len(entries) == 0 {
+		return
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].val > entries[j].val })
+	b.WriteString("- ")
+	b.WriteString(label)
+	b.WriteString(": ")
+	for i, e := range entries {
+		if limit > 0 && i >= limit {
+			break
+		}
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		fmt.Fprintf(b, "%s=%d", e.key, e.val)
+	}
+	if limit > 0 && len(entries) > limit {
+		fmt.Fprintf(b, " ...+%d", len(entries)-limit)
+	}
+	b.WriteByte('\n')
+}
+
+func topFindings(findings []analyzer.Finding, limit int) []analyzer.Finding {
+	if len(findings) == 0 || limit <= 0 {
+		return nil
+	}
+	out := append([]analyzer.Finding(nil), findings...)
+	sort.SliceStable(out, func(i, j int) bool {
+		si, sj := severityRank(out[i].Severity), severityRank(out[j].Severity)
+		if si != sj {
+			return si > sj
+		}
+		return out[i].Score > out[j].Score
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+func severityRank(sev string) int {
+	switch strings.ToUpper(strings.TrimSpace(sev)) {
+	case "CRITICAL":
+		return 4
+	case "HIGH":
+		return 3
+	case "MEDIUM":
+		return 2
+	case "LOW":
+		return 1
+	default:
+		return 0
+	}
 }

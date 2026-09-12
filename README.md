@@ -45,9 +45,9 @@ Analysis works in two modes:
 
 - **No Jira cards** — repository scanning drives risk analysis
 - **With Jira cards** — hybrid mode:
-  - classify each card into test categories (e2e, security, integration, etc.)
-  - use **Jira evidence** from the card text
-  - use **repository test evidence** when matching tests exist in scanned repos
+  - group cards by test category from descriptions and analyze risk at category level
+  - use **Jira evidence** and **repository test evidence** together when tests exist
+  - only drill into individual cards when a gap or issue is flagged
 
 Multiple cards are supported (comma-separated keys, config list, or fixture arrays).
 
@@ -143,6 +143,30 @@ llm:
 The tool never sends source files automatically. Only compact extracted evidence
 is sent to the LLM.
 
+### Saving LLM tokens
+
+The markdown report is always complete without the LLM. Deterministic sections
+(inventory, risk areas, Jira category tables, recommendations) are built from
+repo and Jira analysis directly.
+
+Use the LLM only for narrative synthesis:
+
+| Setting | Input tokens | Output tokens | Report |
+|--------|--------------|---------------|--------|
+| `--no-llm` or `llm.mode: off` | 0 | 0 | Deterministic only (valid full report) |
+| `llm.mode: executive` (default when enabled) | Capped evidence, short prompt | ~2k max | Exec summary + priority actions, then deterministic sections |
+| `llm.mode: full` | Capped evidence, full prompt | ~8k max | Full AI narrative, then deterministic sections |
+
+Evidence caps (configurable):
+
+```yaml
+llm:
+  mode: executive
+  max_findings_per_repo: 8   # highest-severity findings per repo
+  max_evidence_chars: 24000  # hard truncate with a marker
+  max_output_tokens: 2048
+```
+
 ## Example
 
 ```bash
@@ -159,6 +183,7 @@ Useful options:
 --jira KEY           Comma-separated Jira keys or browse URLs
 --jira-file FILE     Comma-separated JSON Jira issue fixtures
 --jira-no-children   Skip fetching subtasks/child issues for parent cards
+--no-llm             Skip Gemini; write deterministic report only
 --output report.md
 --json-output report.json
 ```
