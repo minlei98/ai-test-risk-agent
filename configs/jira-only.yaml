@@ -1,0 +1,23 @@
+project:
+  name: jira-only-risk-review
+  type: test-readiness
+  description: "Jira-only test risk analysis without repository scanning"
+
+repositories: []
+
+analysis:
+  rules_file: ../rules/risk.yaml
+
+risk:
+  prioritize:
+    - customer_impact
+    - security
+    - data_loss
+    - recovery
+  high_threshold: 70
+  medium_threshold: 40
+
+jira:
+  base_url: https://redhat.atlassian.net
+  include_children: true
+  max_issues: 50

@@ -4,6 +4,19 @@ A Go CLI that analyzes one or more Git repositories and produces a software test
 coverage, risk, gap, and recommendation report. It is designed for Kubernetes /
 OpenShift / Argo CD / GitOps systems and supports cross-repository analysis.
 
+The repository also provides a reusable Copilot skill and agent profile:
+
+- `.github/skills/test-risk-analysis/SKILL.md` defines the evidence and output contract.
+- `.github/agents/test-risk-agent.agent.md` exposes the workflow as a repository AI agent.
+
+The agent uses the CLI for deterministic evidence and can optionally use Gemini
+for narrative synthesis. It does not replace engineering review or claim proof
+of complete test coverage.
+
+For a Jira-only review, use `configs/jira-only.yaml`; it contains no repository
+targets. Repository analysis and Jira analysis are separate by default. Combine
+them only when a hybrid traceability review is requested.
+
 ## Target repositories
 
 The default configuration is designed for:
